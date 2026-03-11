@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agar.io clone</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="menu-container">
+        <div class="menu">
+            <h1 class="title">Agar.io</h1>
+            <input class="name-input" id="nameInput" type="text" maxlength="16" placeholder="Nome" autocomplete="on" />
+            <label class="menu-checkbox" for="themeToggle">
+                <input id="themeToggle" type="checkbox" />
+                <span>Tema escuro</span>
+            </label>
+            <label class="menu-checkbox" for="showMassInCellToggle">
+                <input id="showMassInCellToggle" type="checkbox" />
+                <span>Exibir massa abaixo do nome</span>
+            </label>
+            <label class="menu-checkbox" for="backgroundGridToggle">
+                <input id="backgroundGridToggle" type="checkbox" checked />
+                <span>Exibir setores</span>
+            </label>
+            <label class="menu-checkbox" for="squareGridToggle">
+                <input id="squareGridToggle" type="checkbox" />
+                <span>Exibir grid quadriculado</span>
+            </label>
+            <button class="play-btn" id="playBtn">Jogar</button>
+            <p class="esc-hint">Pressione ESC para pausar</p>
+        </div>
+    </div>
+    
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div class="hud" id="hud">
+            <div class="hud-item">FPS: <span id="fpsValue">0</span></div>
+            <div class="hud-item">Massa: <span id="massValue">0</span></div>
+            <div class="hud-item">Células: <span id="cellsValue">1</span></div>
+            <div class="hud-item">Grid: <span id="gridValue">A1</span></div>
+        </div>
+        <div class="leaderboard" id="leaderboard">
+            <div class="leaderboard-title">Leaderboard</div>
+            <div class="leaderboard-list" id="leaderboardList"></div>
+        </div>
+        <canvas id="minimapCanvas" class="minimap" width="180" height="180"></canvas>
+        <div class="loading">Carregando jogo...</div>
+    </div>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
