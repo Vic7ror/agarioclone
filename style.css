@@ -218,6 +218,40 @@ body {
     gap: 4px;
 }
 
+.respawn-overlay {
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    min-width: 240px;
+    padding: 14px 18px;
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.86);
+    color: #f8fafc;
+    text-align: center;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25);
+}
+
+.respawn-overlay.hidden {
+    display: none;
+}
+
+.respawn-overlay-title {
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.respawn-overlay-timer {
+    margin-top: 6px;
+    font-size: 0.95rem;
+    color: rgba(226, 232, 240, 0.92);
+}
+
 .leaderboard-entry {
     display: grid;
     grid-template-columns: 28px 1fr auto;

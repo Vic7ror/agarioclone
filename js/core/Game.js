@@ -4,6 +4,7 @@ import { EjectMass } from '../entities/ejectMass.js';
 import { GridSystem } from '../utils/GridSystem.js';
 import { UIManager } from '../ui/UIManager.js';
 import { Virus } from '../entities/virus.js';
+import { formatDisplayMass } from '../utils/MassUtils.js';
 
 export class Game {
     constructor() {
@@ -21,11 +22,11 @@ export class Game {
         this.bots = [];
         this.botSpawnCounter = 1;
         this.botTargetCount = 60;
-        this.foodTargetCount = 8000;
+        this.foodTargetCount = 10400;
         this.foods = [];
         this.ejectMasses = [];
         this.viruses = [];
-        this.virusTargetCount = 20;
+        this.virusTargetCount = this.calculateVirusTargetCount();
         this.fpsValue = document.getElementById('fpsValue');
         this.massValue = document.getElementById('massValue');
         this.cellsValue = document.getElementById('cellsValue');
@@ -58,6 +59,9 @@ export class Game {
         this.showBackgroundGrid = true;
         this.showSquareGrid = true;
         this.defaultGameZoom = 1.6;
+        this.respawnCooldownDuration = 5;
+        this.respawnTimerRemaining = 0;
+        this.isRespawnPending = false;
         
         this.setupCanvas();
         this.initializeFoods();
@@ -90,6 +94,17 @@ export class Game {
             this.canvas.width / this.worldWidth,
             this.canvas.height / this.worldHeight
         );
+    }
+
+    calculateVirusTargetCount() {
+        const baselineArea = 10000 * 10000;
+        const baselineFoodCount = 8000;
+        const baselineVirusCount = 100;
+        const areaScale = (this.worldWidth * this.worldHeight) / baselineArea;
+        const foodScale = this.foodTargetCount / baselineFoodCount;
+        const balanceScale = Math.sqrt(areaScale * foodScale);
+
+        return Math.max(20, Math.round(baselineVirusCount * balanceScale));
     }
     
     setupEventListeners() {
@@ -127,7 +142,7 @@ export class Game {
     startGame() {
         if (this.gameStarted) return;
 
-        if (this.player.cells.length === 0) {
+        if (this.player.cells.length === 0 && !this.isRespawnPending) {
             this.respawnPlayer();
         }
 
@@ -156,6 +171,11 @@ export class Game {
         this.player.name = this.uiManager.getPlayerName();
         this.player.showMassInCell = this.uiManager.shouldShowMassInCell();
         this.uiManager.hideMenu();
+        if (this.isRespawnPending) {
+            this.uiManager.showRespawnCountdown(this.respawnTimerRemaining);
+        } else {
+            this.uiManager.hideRespawnCountdown();
+        }
         this.uiManager.hideLoading();
         this.gameStarted = true;
         this.lastFrameTime = null;
@@ -173,6 +193,7 @@ export class Game {
         };
 
         this.isEjecting = false;
+        this.uiManager.hideRespawnCountdown();
         this.uiManager.showMenu();
         this.centerCameraOnMap();
         this.gameStarted = false;
@@ -198,16 +219,24 @@ export class Game {
     setSquareGridEnabled(enabled) {
         this.showSquareGrid = enabled !== false;
     }
+
+    getScaledEjectMass(totalMass) {
+        const baseEjectMass = 200;
+        const growthMultiplier = 1 + Math.max(0, Math.log2(totalMass / 5000 + 1)) * 0.35;
+
+        return Math.min(420, Math.round(baseEjectMass * growthMultiplier));
+    }
     
     ejectMassFromPlayer() {
         if (!this.gameStarted || this.player.cells.length === 0) return;
 
-        const minCellMassToEject = 600;
-        const minCellMassAfterEject = 400;
-        const ejectMassAmount = 200;
+        const totalMass = this.player.getMass();
+        const ejectMassAmount = this.getScaledEjectMass(totalMass);
+        const minCellMassAfterEject = Math.max(400, Math.round(ejectMassAmount * 1.6));
+        const minCellMassToEject = ejectMassAmount + minCellMassAfterEject;
 
         for (const cell of this.player.cells) {
-            // Só ejeta quando dá para retirar massa fixa e manter segurança.
+            // Só ejeta quando a célula consegue sustentar a ejeção e ainda ficar estável.
             if (cell.mass < minCellMassToEject) {
                 continue;
             }
@@ -218,7 +247,7 @@ export class Game {
                 continue;
             }
 
-            const actualEjectMass = ejectMassAmount;
+            const actualEjectMass = Math.min(ejectMassAmount, maxSafeEject);
 
             // Direção em relação ao mouse
             const dx = this.mousePosition.x - cell.x;
@@ -239,8 +268,9 @@ export class Game {
             // Criar e lançar massa
             const ejectX = cell.x + dirX * (cell.radius + ejectRadius + 1.5);
             const ejectY = cell.y + dirY * (cell.radius + ejectRadius + 1.5);
-            const ejectVx = dirX * 1200;
-            const ejectVy = dirY * 1200;
+            const ejectSpeed = 1200 + Math.min(220, actualEjectMass * 0.35);
+            const ejectVx = dirX * ejectSpeed;
+            const ejectVy = dirY * ejectSpeed;
 
             this.ejectMasses.push(
                 new EjectMass(ejectX, ejectY, ejectVx, ejectVy, actualEjectMass, this.player.color, ejectRadius, {
@@ -301,7 +331,7 @@ export class Game {
         const x = this.randomInRange(300, this.worldWidth - 300);
         const y = this.randomInRange(300, this.worldHeight - 300);
         const bot = new Player(x, y);
-        const spawnMass = Math.round(this.randomInRange(400, 10000));
+        const spawnMass = Math.round(this.randomInRange(640, 5200));
         const spawnRadius = bot.massToRadius(spawnMass);
         const mainCell = bot.cells[0];
         mainCell.mass = spawnMass;
@@ -389,7 +419,7 @@ export class Game {
 
             if (hasMassLabel) {
                 const massFontSize = Math.max(8, fontSize * 0.52);
-                const massText = Math.round(cell.mass).toString();
+                const massText = formatDisplayMass(cell.mass);
                 const massY = cell.y + fontSize * 0.52;
                 this.ctx.font = `bold ${massFontSize}px Arial`;
                 this.ctx.lineWidth = Math.max(1, massFontSize * 0.14);
@@ -561,11 +591,11 @@ export class Game {
 
     canCellEatCell(eaterCell, targetCell) {
         if (!eaterCell || !targetCell) return false;
-        if (eaterCell.mass <= targetCell.mass * 1.10) return false;
+        if (eaterCell.mass <= targetCell.mass * 1.2) return false;
 
         const dist = Math.hypot(eaterCell.x - targetCell.x, eaterCell.y - targetCell.y);
-        // Come quando a maior sobrepõe mais de 40% da menor.
-        return dist + targetCell.radius * 0.4 <= eaterCell.radius;
+        // Exige uma sobreposição um pouco maior para reduzir snowball cedo.
+        return dist + targetCell.radius * 0.5 <= eaterCell.radius;
     }
 
     resolveActorVsActorEating(actorA, actorB) {
@@ -669,14 +699,40 @@ export class Game {
         this.player.color = previousColor;
         this.player.showMassInCell = previousShowMass;
 
+        this.isRespawnPending = false;
+        this.respawnTimerRemaining = 0;
         this.camera.followCellId = null;
         this.camera.followTimer = 0;
+        this.camera.x = this.player.x;
+        this.camera.y = this.player.y;
+        this.mouseScreen.x = this.canvas.width / 2;
+        this.mouseScreen.y = this.canvas.height / 2;
+        this.mousePosition.x = this.player.x;
+        this.mousePosition.y = this.player.y;
+        this.uiManager.hideRespawnCountdown();
     }
 
-    handlePlayerDeath() {
-        if (this.player.cells.length > 0) return false;
+    handlePlayerDeath(deltaTime) {
+        if (this.player.cells.length > 0) {
+            return false;
+        }
 
-        this.pauseGame();
+        if (!this.isRespawnPending) {
+            this.isRespawnPending = true;
+            this.respawnTimerRemaining = this.respawnCooldownDuration;
+            this.isEjecting = false;
+            this.camera.followCellId = null;
+            this.camera.followTimer = 0;
+            this.centerCameraOnMap();
+        }
+
+        this.respawnTimerRemaining = Math.max(0, this.respawnTimerRemaining - deltaTime);
+        this.uiManager.showRespawnCountdown(this.respawnTimerRemaining);
+
+        if (this.respawnTimerRemaining <= 0) {
+            this.respawnPlayer();
+        }
+
         return true;
     }
     
@@ -739,9 +795,7 @@ export class Game {
         this.handlePlayerBotEatingCollisions();
         this.handleBotVsBotEatingCollisions();
         this.cleanupAndRespawnBots();
-        if (this.handlePlayerDeath()) {
-            return;
-        }
+        this.handlePlayerDeath(deltaTime);
         this.renderScene();
 
         requestAnimationFrame((time) => this.animate(time));
@@ -912,12 +966,20 @@ export class Game {
                 const dirY = eject.vy / shotLen;
                 this.ejectMasses.splice(i, 1);
 
+                const shouldDuplicate = virus.feed(dirX, dirY);
+                if (!shouldDuplicate) {
+                    break;
+                }
+
+                virus.reset();
+
+                const launchDistance = virus.radius + 18;
                 const offspring = new Virus(
-                    virus.x + dirX * (virus.radius + 4),
-                    virus.y + dirY * (virus.radius + 4)
+                    virus.x + dirX * launchDistance,
+                    virus.y + dirY * launchDistance
                 );
-                offspring.vx = dirX * 900;
-                offspring.vy = dirY * 900;
+                offspring.vx = dirX * 1050;
+                offspring.vy = dirY * 1050;
                 this.viruses.push(offspring);
                 break;
             }
@@ -928,6 +990,14 @@ export class Game {
         const minZoom = this.getMinZoom();
         this.camera.zoom += (this.camera.targetZoom - this.camera.zoom) * Math.min(1, deltaTime * 10);
         this.camera.zoom = Math.max(minZoom, this.camera.zoom);
+
+        if (this.isRespawnPending || this.player.cells.length === 0) {
+            this.camera.followCellId = null;
+            this.camera.followTimer = 0;
+            this.camera.x = this.worldWidth / 2;
+            this.camera.y = this.worldHeight / 2;
+            return;
+        }
 
         if (this.camera.followTimer > 0) {
             this.camera.followTimer -= deltaTime;
@@ -964,7 +1034,7 @@ export class Game {
         if (!this.fpsValue || !this.massValue || !this.cellsValue || !this.gridValue) return;
 
         this.fpsValue.textContent = Math.round(this.currentFps).toString();
-        this.massValue.textContent = this.player.getMass().toString();
+        this.massValue.textContent = formatDisplayMass(this.player.getMass());
         this.cellsValue.textContent = this.player.cells.length.toString();
         this.gridValue.textContent = this.gridSystem.getCoordinateLabel(
             this.player.x,
@@ -981,11 +1051,13 @@ export class Game {
             {
                 name: this.player.name || 'Célula',
                 mass: this.player.getMass(),
+                displayMass: formatDisplayMass(this.player.getMass()),
                 isPlayer: true
             },
             ...this.bots.map(bot => ({
                 name: bot.name || 'Bot',
                 mass: bot.getMass(),
+                displayMass: formatDisplayMass(bot.getMass()),
                 isPlayer: false
             }))
         ];
@@ -999,7 +1071,7 @@ export class Game {
             <div class="leaderboard-entry${entry.isPlayer ? ' is-player' : ''}">
                 <span class="leaderboard-rank">${index + 1}.</span>
                 <span class="leaderboard-name">${entry.name}</span>
-                <span class="leaderboard-mass">${entry.mass}</span>
+                <span class="leaderboard-mass">${entry.displayMass}</span>
             </div>
         `).join('');
     }

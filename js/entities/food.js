@@ -1,9 +1,9 @@
 import { radiusToMass } from '../utils/MassUtils.js';
 
 const FOOD_TYPES = [
-    { radius: 8 },
-    { radius: 12 },
-    { radius: 16 }
+    { radius: 10 },
+    { radius: 14 },
+    { radius: 18 }
 ];
 
 const FOOD_COLORS = [
@@ -40,8 +40,8 @@ export class Food {
     static getRandomType() {
         const roll = Math.random();
 
-        if (roll < 0.65) return FOOD_TYPES[0];
-        if (roll < 0.9) return FOOD_TYPES[1];
+        if (roll < 0.84) return FOOD_TYPES[0];
+        if (roll < 0.98) return FOOD_TYPES[1];
         return FOOD_TYPES[2];
     }
 

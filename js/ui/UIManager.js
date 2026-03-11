@@ -8,6 +8,8 @@ export class UIManager {
         this.showMassInCellToggle = document.getElementById('showMassInCellToggle');
         this.backgroundGridToggle = document.getElementById('backgroundGridToggle');
         this.squareGridToggle = document.getElementById('squareGridToggle');
+        this.respawnOverlay = document.getElementById('respawnOverlay');
+        this.respawnTimerValue = document.getElementById('respawnTimerValue');
     }
 
     getPlayerName() {
@@ -76,6 +78,19 @@ export class UIManager {
     
     showMenu() {
         this.menuContainer.style.display = 'flex';
+    }
+
+    showRespawnCountdown(secondsRemaining) {
+        if (!this.respawnOverlay || !this.respawnTimerValue) return;
+
+        this.respawnTimerValue.textContent = Math.max(0, Math.ceil(secondsRemaining)).toString();
+        this.respawnOverlay.classList.remove('hidden');
+    }
+
+    hideRespawnCountdown() {
+        if (!this.respawnOverlay) return;
+
+        this.respawnOverlay.classList.add('hidden');
     }
     
     hideLoading() {

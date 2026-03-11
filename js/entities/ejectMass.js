@@ -1,4 +1,4 @@
-import { massToRadius } from '../utils/MassUtils.js';
+import { formatDisplayMass, massToRadius } from '../utils/MassUtils.js';
 
 export class EjectMass {
     constructor(x, y, vx, vy, mass = 10, color = '#fbbf24', radius = null, options = {}) {
@@ -61,7 +61,7 @@ export class EjectMass {
 
         if (!showMass) return;
 
-        const massText = Math.round(this.mass).toString();
+        const massText = formatDisplayMass(this.mass);
         const fontSize = Math.max(8, this.radius * 0.72);
         ctx.font = `bold ${fontSize}px Arial`;
         ctx.textAlign = 'center';

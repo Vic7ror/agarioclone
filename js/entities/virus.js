@@ -1,4 +1,4 @@
-import { massToRadius } from '../utils/MassUtils.js';
+import { formatDisplayMass, massToRadius } from '../utils/MassUtils.js';
 
 export class Virus {
     constructor(x, y) {
@@ -9,7 +9,7 @@ export class Virus {
         this.vx = 0;
         this.vy = 0;
         this.feedCount = 0;
-        this.maxFeedCount = 7;
+        this.maxFeedCount = 3;
         this.shootDirX = 1;
         this.shootDirY = 0;
         this.spikeCount = 22;
@@ -17,6 +17,7 @@ export class Virus {
         this.wallBounce = 0.9;
         this.feedCharge = 0;
         this.feedPulse = 0;
+        this.pulseTime = Math.random() * Math.PI * 2;
     }
 
     // Alimenta o vírus com uma massa ejetada.
@@ -25,7 +26,7 @@ export class Virus {
         this.feedCount++;
         this.shootDirX = dirX;
         this.shootDirY = dirY;
-        this.feedPulse = Math.min(1, this.feedPulse + 0.55);
+        this.feedPulse = Math.min(1.35, this.feedPulse + 0.9);
         return this.feedCount >= this.maxFeedCount;
     }
 
@@ -70,16 +71,18 @@ export class Virus {
         // Animação suave de alimentação: charge aproxima do progresso e pulse relaxa.
         const targetCharge = Math.min(1, this.feedCount / this.maxFeedCount);
         this.feedCharge += (targetCharge - this.feedCharge) * Math.min(1, deltaTime * 10);
-        this.feedPulse = Math.max(0, this.feedPulse - deltaTime * 2.6);
+        this.feedPulse = Math.max(0, this.feedPulse - deltaTime * 1.8);
+        this.pulseTime += deltaTime * 2.2;
     }
 
     draw(ctx) {
         const spikes = this.spikeCount;
-        const pulseScale = 1 + this.feedPulse * 0.12;
+        const idlePulseScale = 1 + Math.sin(this.pulseTime) * 0.03;
+        const pulseScale = 1 + this.feedPulse * 0.22;
         const chargeScale = 1 + this.feedCharge * 0.07;
-        const visualRadius = this.radius * pulseScale * chargeScale;
+        const visualRadius = this.radius * idlePulseScale * pulseScale * chargeScale;
         const innerR = visualRadius;
-        const outerR = visualRadius + this.spikeLen * (1 + this.feedCharge * 0.55);
+        const outerR = visualRadius + this.spikeLen * (1 + this.feedCharge * 0.55 + this.feedPulse * 0.45);
 
         // Corpo espinhoso (estrela)
         ctx.beginPath();
@@ -103,16 +106,34 @@ export class Virus {
             this.x - visualRadius * 0.2, this.y - visualRadius * 0.2, 0,
             this.x, this.y, visualRadius * 0.9
         );
-        grad.addColorStop(0,   `rgba(120,255,60,${0.28 + this.feedCharge * 0.2})`);
-        grad.addColorStop(0.6, `rgba(60,180,0,${0.1 + this.feedCharge * 0.18})`);
+        grad.addColorStop(0,   `rgba(120,255,60,${0.28 + this.feedCharge * 0.2 + this.feedPulse * 0.16})`);
+        grad.addColorStop(0.6, `rgba(60,180,0,${0.1 + this.feedCharge * 0.18 + this.feedPulse * 0.12})`);
         grad.addColorStop(1,   'rgba(0,0,0,0)');
         ctx.beginPath();
         ctx.arc(this.x, this.y, visualRadius, 0, Math.PI * 2);
         ctx.fillStyle = grad;
         ctx.fill();
 
+        if (this.feedPulse > 0.02) {
+            const halo = ctx.createRadialGradient(
+                this.x,
+                this.y,
+                visualRadius * 0.55,
+                this.x,
+                this.y,
+                visualRadius * (1.45 + this.feedPulse * 0.18)
+            );
+            halo.addColorStop(0, `rgba(170,255,120,${this.feedPulse * 0.22})`);
+            halo.addColorStop(0.55, `rgba(110,255,70,${this.feedPulse * 0.12})`);
+            halo.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, visualRadius * (1.15 + this.feedPulse * 0.12), 0, Math.PI * 2);
+            ctx.fillStyle = halo;
+            ctx.fill();
+        }
+
         // Exibe massa do vírus por padrão.
-        const massText = Math.round(this.mass).toString();
+        const massText = formatDisplayMass(this.mass);
         const fontSize = Math.max(11, visualRadius * 0.48);
         ctx.font = `bold ${fontSize}px Arial`;
         ctx.textAlign = 'center';

@@ -1,4 +1,4 @@
-import { MASS_SCALE, massToRadius as sharedMassToRadius, radiusToMass as sharedRadiusToMass } from '../utils/MassUtils.js';
+import { MASS_SCALE, formatDisplayMass, massToRadius as sharedMassToRadius, radiusToMass as sharedRadiusToMass } from '../utils/MassUtils.js';
 
 export class Player {
     constructor(x, y) {
@@ -16,12 +16,13 @@ export class Player {
         this.wallBounce = 0.82;
         this.splitWallBounce = 0.94;
         this.stopSmoothing = 0.22;
-        this.massDecayRate = 0.002;   // 0.2% da massa por segundo acima do limiar
+        this.massDecayRate = 0.005;   // 0.5% da massa por segundo acima do limiar
         this.massDecayMin  = 400;     // massa mínima — abaixo disso, sem decay
         this.massScale = MASS_SCALE;
+        this.foodGrowthFactor = 0.7;
         this.nextCellId = 1;
         this.nextSplitOrder = 1;
-        const initialMass = 400;
+        const initialMass = 640;
         const initialRadius = this.massToRadius(initialMass);
         const initialCell = this.createCell(x, y, initialRadius, 0, 0, 0);
         initialCell.isMain = true;
@@ -342,7 +343,7 @@ export class Player {
 
                 if (hasMassLabel) {
                     const massFontSize = Math.max(8, fontSize * 0.52);
-                    const massText = Math.round(cell.mass).toString();
+                    const massText = formatDisplayMass(cell.mass);
                     const massY = cell.y + fontSize * 0.52;
                     ctx.font = `bold ${massFontSize}px Arial`;
                     ctx.lineWidth = Math.max(1, massFontSize * 0.14);
@@ -450,10 +451,9 @@ export class Player {
 
     absorbMass(cell, mass, foodRadius = 0, eatMode = false) {
         if (foodRadius > 0) {
-            // Soma de áreas: garante crescimento proporcional ao tamanho visual da food
-            const newRadius = Math.sqrt(cell.targetRadius * cell.targetRadius + foodRadius * foodRadius);
-            cell.targetRadius = newRadius;
-            cell.mass = this.radiusToMass(newRadius);
+            const effectiveFoodMass = mass * this.foodGrowthFactor;
+            cell.mass += effectiveFoodMass;
+            cell.targetRadius = this.massToRadius(cell.mass);
         } else {
             cell.mass += mass;
             cell.targetRadius = this.massToRadius(cell.mass);
@@ -493,7 +493,7 @@ export class Player {
             const totalMassNow = this.getMass();
             // -5% a cada 5000 de massa, mínimo de 20% da distância base
             const massPenalty = Math.max(0.2, 1 - Math.floor(totalMassNow / 5000) * 0.05);
-            const splitTravelDistance = newRadius * 7.5 * massPenalty;
+            const splitTravelDistance = newRadius * 11.25 * massPenalty;
             const splitTravelDuration = 0.42;
             const splitStartSpeed = this.splitBoost * 0.86;
             const splitEndSpeed = this.splitBoost * 0.16;
@@ -560,16 +560,47 @@ export class Player {
         const availableSlots = this.maxCells - this.cells.length + 1;
         if (availableSlots < 2) return false;
         const pieces = Math.max(2, Math.min(16, availableSlots));
-        const massPerPiece = cell.mass / pieces;
-        const radiusPerPiece = this.massToRadius(massPerPiece);
-        const cooldown = this.getDynamicRecombineDelay(massPerPiece);
+        const baseAngle = Math.random() * Math.PI * 2;
+        const angleStep = (Math.PI * 2) / pieces;
+        const weights = [];
+
+        for (let i = 0; i < pieces; i++) {
+            weights.push(0.82 + Math.random() * 0.36);
+        }
+
+        if (cell.isMain && weights.length > 0) {
+            weights[0] += 0.18;
+        }
+
+        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+        const pieceMasses = [];
+        let assignedMass = 0;
+        for (let i = 0; i < pieces; i++) {
+            const pieceMass = i === pieces - 1
+                ? Math.max(1, cell.mass - assignedMass)
+                : cell.mass * (weights[i] / totalWeight);
+            pieceMasses.push(pieceMass);
+            assignedMass += pieceMass;
+        }
+
+        let mainPieceIndex = 0;
+        for (let i = 1; i < pieceMasses.length; i++) {
+            if (pieceMasses[i] > pieceMasses[mainPieceIndex]) {
+                mainPieceIndex = i;
+            }
+        }
 
         const newPieces = [];
         for (let i = 0; i < pieces; i++) {
-            const angle = (i / pieces) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+            const pieceMass = pieceMasses[i];
+            const radiusPerPiece = this.massToRadius(pieceMass);
+            const cooldown = this.getDynamicRecombineDelay(pieceMass);
+            const angle = baseAngle + i * angleStep + (Math.random() - 0.5) * 0.42;
             const dirX = Math.cos(angle);
             const dirY = Math.sin(angle);
-            const offset = radiusPerPiece * 0.12;
+            const offset = radiusPerPiece * (0.16 + Math.random() * 0.12);
+            const burstScale = 0.9 + Math.random() * 0.24;
+            const speedScale = burstScale * (1.04 - Math.min(0.18, pieceMass / Math.max(1, cell.mass) * 0.85));
             const piece = this.createCell(
                 cell.x + dirX * offset,
                 cell.y + dirY * offset,
@@ -577,18 +608,19 @@ export class Player {
                 0, 0,
                 cooldown
             );
-            piece.mass = massPerPiece;
-            piece.isMain = (i === 0) && cell.isMain;
+            piece.mass = pieceMass;
+            piece.targetRadius = radiusPerPiece;
+            piece.isMain = (i === mainPieceIndex) && cell.isMain;
             piece.splitOrder = this.nextSplitOrder++;
             piece.splitAnim = {
                 dirX, dirY,
-                speed: this.splitBoost * 0.9,
-                minSpeed: this.splitBoost * 0.125,
-                decay: 0.90,
-                duration: 0.32,
-                launchEaseDuration: 0.07,
+                speed: this.splitBoost * (0.7 + speedScale * 0.34),
+                minSpeed: this.splitBoost * (0.09 + Math.random() * 0.06),
+                decay: 0.914 + Math.random() * 0.02,
+                duration: 0.24 + Math.random() * 0.12,
+                launchEaseDuration: 0.055 + Math.random() * 0.035,
                 elapsed: 0,
-                exitSpeed: this.splitBoost * 0.1
+                exitSpeed: this.splitBoost * (0.05 + Math.random() * 0.07)
             };
             newPieces.push(piece);
         }
